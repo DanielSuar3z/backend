@@ -1,10 +1,14 @@
 const mysql = require('mysql2/promise');
+const dotenv = require('dotenv');
+
+// Cargar variables de entorno desde el archivo .env
+dotenv.config();
 
 const pool = mysql.createPool({
-  host: '127.0.0.1',
-  user: 'root',
-  password: 'root',
-  database: 'biblioteca_sistema',
+  host: process.env.hostDB || 'localhost',
+  user: process.env.userDB || 'root',
+  password: process.env.passwordDB || 'root',
+  database: process.env.databaseDB || 'biblioteca_sistema',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
