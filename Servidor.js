@@ -9,6 +9,7 @@ const authRoutes = require('./routes/auth.routes');
 const bibliotecaRoutes = require('./routes/biblioteca.routes');
 const ontologyRoutes = require('./routes/ontology.routes'); 
 const prestamosRoutes = require('./routes/prestamos');
+console.log('✅ Ruta /api/prestamos montada');
 const devolucionesRoutes = require('./routes/devoluciones');
 
 const app = express();

@@ -157,7 +157,7 @@ async function getUserProfile(req, res) {
     const user = await findUserById(userId);
 
     if (!user) {
-      return errorResponse(res, 'Usuario no encontrado.', 404);
+      return errorResponse(res, 'Usuario no encontradooo.', 404);
     }
 
     // Excluir la contraseña del objeto de perfil antes de enviarlo al cliente

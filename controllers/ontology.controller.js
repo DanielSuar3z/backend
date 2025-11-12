@@ -5,59 +5,58 @@ async function queryOntology(req, res) {
   try {
     const consultaSPARQL = `
       PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-PREFIX owl: <http://www.w3.org/2002/07/owl#>
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-PREFIX : <http://www.biblioteca.edu.co/ontologia#>
+      PREFIX owl: <http://www.w3.org/2002/07/owl#>
+      PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+      PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+      PREFIX : <http://www.biblioteca.edu.co/ontologia#>
 
-SELECT ?obra 
-       (STR(?titulo) AS ?Titulo_)
-       (STR(?autorNombre) AS ?Autor_Nombre_)
-       (STR(?autorApellidos) AS ?Autor_Apellidos_)
-       (STR(?genero) AS ?Genero_)
-       (STR(?isbn) AS ?ISBN_)
-       (STR(?formato) AS ?Formato_)
-       (STR(?codigoBarras) AS ?Codigo_Barras_)
-       (STR(?disponibilidad) AS ?Disponibilidad_)
-       (STR(?ubicacion) AS ?Ubicacion_)
-WHERE {
-  ?obra a :Obra ;
-        :tituloOriginal ?titulo .
-  
-  # Información del autor
-  OPTIONAL {
-    ?obra :tieneAutor ?autor .
-    ?autor :nombre ?autorNombre ;
-           :apellidos ?autorApellidos .
-  }
-  
-  # Género literario
-  OPTIONAL {
-    ?obra :perteneceAGenero ?gen .
-    ?gen :nombreGenero ?genero .
-  }
-  
-  # Información de la manifestación e ítem
-  ?expresion :realizaDe ?obra .
-  ?manifestacion :materializaDe ?expresion .
-  ?item :ejemplificaDe ?manifestacion ;
-        :codigoBarras ?codigoBarras ;
-        :disponibilidad ?disponibilidad .
-  
-  # Ubicación
-  OPTIONAL {
-    ?item :ubicadoEn ?ubic .
-    ?ubic :nombreUbicacion ?ubicacion .
-  }
-  
-  # Información adicional de la manifestación
-  OPTIONAL { ?manifestacion :isbn ?isbn . }
-  OPTIONAL { ?manifestacion :formato ?formato . }
-  
-  # FILTRO: Solo ítems disponibles (opcional)
-  # FILTER(?disponibilidad = "disponible")
-}
-ORDER BY ?titulo
+      SELECT ?obra 
+             (STR(?titulo) AS ?Titulo_)
+             (STR(?autorNombre) AS ?Autor_Nombre_)
+             (STR(?autorApellidos) AS ?Autor_Apellidos_)
+             (STR(?genero) AS ?Genero_)
+             (STR(?isbn) AS ?ISBN_)
+             (STR(?formato) AS ?Formato_)
+             (STR(?disponibilidad) AS ?Disponibilidad_)
+             (STR(?ubicacion) AS ?Ubicacion_)
+      WHERE {
+        ?obra a :Obra .
+        ?obra :tituloOriginal ?titulo .
+        
+        # Información del autor
+        OPTIONAL {
+          ?obra :tieneAutor ?autor .
+          ?autor :nombre ?autorNombre ;
+                 :apellidos ?autorApellidos .
+        }
+        
+        # Género literario
+        OPTIONAL {
+          ?obra :perteneceAGenero ?gen .
+          ?gen :nombreGenero ?genero .
+        }
+        
+        # Información de la manifestación
+        OPTIONAL {
+          ?expresion :realizaDe ?obra .
+          ?manifestacion :materializaDe ?expresion .
+          OPTIONAL { ?manifestacion :isbn ?isbn . }
+          OPTIONAL { ?manifestacion :formato ?formato . }
+          
+          # Información del ítem físico
+          OPTIONAL {
+            ?item :ejemplificaDe ?manifestacion .
+            OPTIONAL { ?item :disponibilidad ?disponibilidad . }
+            
+            # Ubicación
+            OPTIONAL {
+              ?item :ubicadoEn ?ubic .
+              ?ubic :nombreUbicacion ?ubicacion .
+            }
+          }
+        }
+      }
+      ORDER BY ?titulo
     `;
 
     // 1. Ejecutar consulta SPARQL
@@ -68,9 +67,7 @@ ORDER BY ?titulo
       const idObra = item.obra ? item.obra.value.split('#').pop() : null;
       const autorNombre = item.Autor_Nombre_?.value || '';
       const autorApellidos = item.Autor_Apellidos_?.value || '';
-      const codigoBarras = item.CodigoBarras?.value || '';
-      const disponibilidad = item.Disponibilidad?.value || 'desconocida';
-      const autorCompleto = autorNombre || autorApellidos
+      const autorCompleto = autorNombre || autorApellidos 
         ? `${autorNombre} ${autorApellidos}`.trim() 
         : 'Autor desconocido';
 
@@ -82,13 +79,12 @@ ORDER BY ?titulo
         isbn: item.ISBN_ ? item.ISBN_.value : null,
         formato: item.Formato_ ? item.Formato_.value : null,
         disponibilidad: item.Disponibilidad_ ? item.Disponibilidad_.value : 'desconocida',
-        ubicacion: item.Ubicacion_ ? item.Ubicacion_.value : null,
-        codigoBarras: item.CodigoBarras ? item.CodigoBarras_.value : null
+        ubicacion: item.Ubicacion_ ? item.Ubicacion_.value : null
       };
     });
 
     // 3. Responder con los datos formateados
-    return successResponse(res, obrasFormateadas, 'Obras de ontología obtenidas exitosamenteeee');
+    return successResponse(res, obrasFormateadas, 'Obras de ontología obtenidas exitosamente');
 
   } catch (error) {
     console.error('Error consultando ontología de biblioteca:', error);

@@ -2,22 +2,21 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db.config');
 const { authenticateUser } = require('../middleware/auth.middleware');
-const { queryClient, updateClient } = require('../config/sparql.config');
 
 // POST /api/prestamos - Crear un nuevo préstamo
 router.post('/', authenticateUser, async (req, res) => {
     try {
-        const { id_usuario, codigo_barras, fecha_devolucion_esperada } = req.body;
+        const { id_usuario, uri_item_ontologia, fecha_devolucion_esperada } = req.body;
 
-        console.log('📦 Datos recibidos:', { id_usuario, codigo_barras, fecha_devolucion_esperada });
+        console.log('📦 Datos recibidos:', { id_usuario, uri_item_ontologia, fecha_devolucion_esperada });
 
         // Validaciones básicas
-        //if (!id_usuario || !codigo_barras || !fecha_devolucion_esperada) {
-         //   return res.status(400).json({
-         //       success: false,
-         //       error: 'Todos los campos son requeridos'
-          //  });
-      //  }
+        if (!id_usuario || !uri_item_ontologia || !fecha_devolucion_esperada) {
+            return res.status(400).json({
+                success: false,
+                error: 'Todos los campos son requeridos'
+            });
+        }
 
         // Verificar que el usuario existe
         const usuario = await db.executeQuery(
@@ -32,114 +31,22 @@ router.post('/', authenticateUser, async (req, res) => {
             });
         }
 
-        // 1. BUSCAR EL ÍTEM POR CÓDIGO DE BARRAS en la ontología
-        let itemURI = null;
-        let obraInfo = null;
-        
-        try {
-            console.log('🔍 Buscando ítem por código de barras en ontología...');
-            
-            const findItemQuery = `
-                PREFIX : <http://www.biblioteca.edu.co/ontologia#>
-                SELECT ?item ?codigoBarras ?disponibilidad ?tituloObra ?autor ?obra
-                WHERE {
-                  ?item a :Item ;
-                        :codigoBarras "${codigo_barras}" ;
-                        :disponibilidad ?disponibilidad .
-                  
-                  ?manifestacion :esEjemplificadaPor ?item .
-                  ?expresion :esMaterializadaPor ?manifestacion .
-                  ?obra :esRealizadaPor ?expresion ;
-                        :tituloOriginal ?tituloObra .
-                  
-                  OPTIONAL {
-                    ?obra :tieneAutor ?autorObj .
-                    ?autorObj :nombreCompleto ?autor .
-                  }
-                }
-                LIMIT 1
-            `;
-
-            console.log('🔧 Ejecutando consulta SPARQL para encontrar ítem:', findItemQuery);
-            
-            const results = await queryClient.query(findItemQuery).execute();
-            
-            if (results.length === 0) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'No se encontró el ítem con el código de barras proporcionado'
-                });
-            }
-
-            itemURI = results[0].item.value;
-            const disponibilidad = results[0].disponibilidad.value;
-            obraInfo = {
-                titulo: results[0].tituloObra.value,
-                autor: results[0].autor?.value || 'Desconocido',
-                obraURI: results[0].obra.value
-            };
-            
-            if (disponibilidad !== 'disponible') {
-                return res.status(400).json({
-                    success: false,
-                    error: `El ítem no está disponible. Estado actual: ${disponibilidad}`
-                });
-            }
-            
-            console.log('✅ Ítem encontrado:', { itemURI, codigo_barras, disponibilidad, obraInfo });
-
-        } catch (sparqlError) {
-            console.error('❌ Error al buscar ítem en ontología:', sparqlError);
-            return res.status(500).json({
-                success: false,
-                error: 'Error al verificar disponibilidad en la ontología'
-            });
-        }
-
-        // 2. Insertar el préstamo en MySQL (guardando el código de barras)
+        // 1. Insertar el préstamo en MySQL
         const result = await db.executeQuery(
             `INSERT INTO prestamos 
              (id_usuario, uri_item_ontologia, fecha_devolucion_esperada, estado, id_usuario_registro) 
              VALUES (?, ?, ?, 'activo', ?)`,
-            [id_usuario, codigo_barras, fecha_devolucion_esperada, id_usuario]
+            [id_usuario, uri_item_ontologia, fecha_devolucion_esperada, id_usuario]
         );
 
         console.log('✅ Préstamo creado exitosamente. ID:', result.insertId);
-
-        // 3. ACTUALIZAR EL ÍTEM en la ontología a "prestado"
-        try {
-            console.log('🔄 Actualizando disponibilidad del ítem en ontología...');
-            
-            const updateItemQuery = `
-                PREFIX : <http://www.biblioteca.edu.co/ontologia#>
-                DELETE { 
-                    <${itemURI}> :disponibilidad "disponible" .
-                }
-                INSERT {
-                    <${itemURI}> :disponibilidad "prestado" .
-                }
-                WHERE {
-                    <${itemURI}> :disponibilidad "disponible" .
-                }
-            `;
-
-            console.log('🔧 Ejecutando actualización del ítem:', updateItemQuery);
-            await updateClient.query(updateItemQuery).execute();
-            console.log('✅ Estado del ítem actualizado: prestado');
-
-        } catch (updateError) {
-            console.error('❌ Error al actualizar ontología:', updateError);
-            // Aunque falle la actualización de la ontología, el préstamo ya está guardado en MySQL
-        }
 
         res.json({
             success: true,
             data: {
                 id_prestamo: result.insertId,
                 id_usuario,
-                codigo_barras: codigo_barras,
-                item_uri: itemURI,
-                obra_info: obraInfo,
+                uri_item_ontologia,
                 fecha_prestamo: new Date(),
                 fecha_devolucion_esperada,
                 estado: 'activo'
@@ -152,6 +59,111 @@ router.post('/', authenticateUser, async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Error interno del servidor: ' + error.message
+        });
+    }
+});
+
+// GET /api/prestamos - Obtener préstamos del usuario
+router.get('/', authenticateUser, async (req, res) => {
+    try {
+        const usuarioId = req.user.usuarioId;
+
+        const prestamos = await db.executeQuery(
+            `SELECT p.*, u.nombres, u.apellidos 
+             FROM prestamos p
+             JOIN usuario u ON p.id_usuario = u.id_usuario
+             WHERE p.id_usuario = ? AND p.estado = 'activo'
+             ORDER BY p.fecha_prestamo DESC`,
+            [usuarioId]
+        );
+
+        res.json({
+            success: true,
+            data: prestamos
+        });
+
+    } catch (error) {
+        console.error('❌ Error al obtener préstamos:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor'
+        });
+    }
+});
+
+// GET /api/prestamos/:id - Obtener un préstamo específico
+router.get('/:id', authenticateUser, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const usuarioId = req.user.usuarioId;
+
+        const prestamo = await db.executeQuery(
+            `SELECT p.*, u.nombres, u.apellidos 
+             FROM prestamos p
+             JOIN usuario u ON p.id_usuario = u.id_usuario
+             WHERE p.id_prestamo = ? AND p.id_usuario = ?`,
+            [id, usuarioId]
+        );
+
+        if (prestamo.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Préstamo no encontrado'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: prestamo[0]
+        });
+
+    } catch (error) {
+        console.error('❌ Error al obtener préstamo:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor'
+        });
+    }
+});
+
+// PUT /api/prestamos/:id - Actualizar un préstamo (para devoluciones)
+router.put('/:id', authenticateUser, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { estado, fecha_devolucion_real } = req.body;
+        const usuarioId = req.user.usuarioId;
+
+        // Verificar que el préstamo existe y pertenece al usuario
+        const prestamoExistente = await db.executeQuery(
+            'SELECT * FROM prestamos WHERE id_prestamo = ? AND id_usuario = ?',
+            [id, usuarioId]
+        );
+
+        if (prestamoExistente.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Préstamo no encontrado'
+            });
+        }
+
+        // Actualizar el préstamo
+        await db.executeQuery(
+            `UPDATE prestamos 
+             SET estado = ?, fecha_devolucion_real = ?
+             WHERE id_prestamo = ? AND id_usuario = ?`,
+            [estado || 'devuelto', fecha_devolucion_real || new Date(), id, usuarioId]
+        );
+
+        res.json({
+            success: true,
+            message: 'Préstamo actualizado exitosamente'
+        });
+
+    } catch (error) {
+        console.error('❌ Error al actualizar préstamo:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor'
         });
     }
 });
