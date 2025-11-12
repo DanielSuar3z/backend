@@ -2,7 +2,7 @@ const { findUserByEmail, createUser, getRoles } = require('../models/user.model'
 const { generateToken } = require('../config/jwt.config');
 const { successResponse, errorResponse } = require('../utils/response');
 const bcrypt = require('bcrypt');
-const mysqlPool = require('../config/db.config'); // Asegúrate de que esta ruta sea correcta
+const mysqlPool = require('../config/db.config'); 
 const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'jaimebeltran0610'; // Asegúrate de que esta variable esté definida en tu entorno
 
