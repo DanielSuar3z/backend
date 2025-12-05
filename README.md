@@ -313,7 +313,7 @@ Agradecimientos
 
 Soporte
 
-Para soporte, abrir un issue en GitHub o contactar a jaime.beltran@ejemplo.com
+Para soporte, abrir un issue en GitHub o contactar a danielsuarez2407@gmail.com
 
 ---
 
