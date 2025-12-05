@@ -303,7 +303,7 @@ Contribuir
 
 Autores
 
-- Jaime Beltrán - Desarrollo inicial
+- Jaime Daniel Beltrán Suárez - Desarrollo inicial
 
 Agradecimientos
 
